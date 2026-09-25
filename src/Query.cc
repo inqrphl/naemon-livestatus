@@ -18,6 +18,7 @@
 #include "Column.h"
 #include "EmptyColumn.h"
 #include "OutputBuffer.h"
+#include "NumberFormat.h"
 #include "InputBuffer.h"
 #include "StatsColumn.h"
 #include "Aggregator.h"
@@ -1162,18 +1163,45 @@ void Query::outputFieldSeparator()
         _output->addChar(',');
 }
 
+// The memoized "%.10e" results, one array per thread
+thread_local DoubleCacheEntry g_double_cache[DOUBLE_CACHE_SIZE];
+
+const char *formatDoubleSlow(double value, int *len)
+{
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    DoubleCacheEntry *e =
+        &g_double_cache[(size_t)((bits * FIBONACCI_HASHING_MULTIPLER_64_BIT)>> (64 - DOUBLE_CACHE_LOG2))];
+
+    int n = snprintf(e->text, sizeof(e->text), "%.10e", value);
+    if (n < 0 || (size_t)n >= sizeof(e->text)) {
+        // Unreachable in practice: "%.10e" is at most 18 bytes and text[] is 24.
+        static thread_local char too_long[64];
+        n = snprintf(too_long, sizeof(too_long), "%.10e", value);
+        *len = n > 0 ? n : 0;
+        return too_long;
+    }
+
+    e->bits = bits;
+    e->len = (unsigned char)n;
+    *len = n;
+    return e->text;
+}
+
 void Query::outputInteger(int32_t value)
 {
-    char buf[32];
-    int l = snprintf(buf, 32, "%d", value);
-    _output->addBuffer(buf, l);
+    char buf[16];
+    char *end = buf + sizeof(buf);
+    char *p = formatIntegerBackward(end, value);
+    _output->addBuffer(p, (size_t)(end - p));
 }
 
 void Query::outputInteger64(int64_t value)
 {
-    char buf[32];
-    int l = snprintf(buf, 32, "%lld", (long long int )value);
-    _output->addBuffer(buf, l);
+    char buf[24];
+    char *end = buf + sizeof(buf);
+    char *p = formatIntegerBackward(end, value);
+    _output->addBuffer(p, (size_t)(end - p));
 }
 
 void Query::outputTime(time_t value)
@@ -1184,30 +1212,40 @@ void Query::outputTime(time_t value)
 
 void Query::outputTimeVal(timeval value)
 {
-    char buf[64];
-    int l = snprintf(buf, sizeof(buf), "%lu.%06lu", value.tv_sec + _timezone_offset, value.tv_usec);
+    time_t seconds = value.tv_sec + _timezone_offset;
+    char buf[40];
+
+    // formatTimeVal only works on this conditions
+    if (seconds >= 0 && value.tv_usec >= 0 && value.tv_usec <= 999999) {
+        _output->addBuffer(buf, (size_t)formatTimeVal(buf, seconds, value.tv_usec));
+        return;
+    }
+
+    int l = snprintf(buf, sizeof(buf), "%lu.%06lu", seconds, value.tv_usec);
     _output->addBuffer(buf, l);
 }
 
 void Query::outputUnsignedLong(unsigned long value)
 {
-    char buf[64];
-    int l = snprintf(buf, sizeof(buf), "%lu", value);
-    _output->addBuffer(buf, l);
+    char buf[24];
+    char *end = buf + sizeof(buf);
+    char *p = formatUnsignedBackward(end, (uint64_t)value);
+    _output->addBuffer(p, (size_t)(end - p));
 }
 
 void Query::outputCounter(counter_t value)
 {
-    char buf[64];
-    int l = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)value);
-    _output->addBuffer(buf, l);
+    char buf[24];
+    char *end = buf + sizeof(buf);
+    char *p = formatUnsignedBackward(end, (uint64_t)(unsigned long long)value);
+    _output->addBuffer(p, (size_t)(end - p));
 }
 
 void Query::outputDouble(double value)
 {
-    char buf[64];
-    int l = snprintf(buf, sizeof(buf), "%.10e", value);
-    _output->addBuffer(buf, l);
+    int len;
+    const char *text = formatDouble(value, &len);
+    _output->addBuffer(text, (size_t)len);
 }
 
 void Query::outputNull()

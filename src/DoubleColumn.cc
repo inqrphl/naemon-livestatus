@@ -4,6 +4,7 @@
 
 #include "DoubleColumn.h"
 #include "DoubleColumnFilter.h"
+#include "NumberFormat.h"
 #include "Query.h"
 
 void DoubleColumn::output(void *data, Query *query)
@@ -18,9 +19,9 @@ Filter *DoubleColumn::createFilter(int operator_id, char *value)
 
 string DoubleColumn::valueAsString(void *data, Query *query)
 {
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%.10e", getValue(data));
-    return buf;
+    int len;
+    const char *text = formatDouble(getValue(data), &len);
+    return string(text, (size_t)len);
 }
 
 int DoubleColumn::compare(void *dataa, void *datab, Query *query)

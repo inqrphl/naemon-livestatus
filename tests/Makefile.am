@@ -2,7 +2,8 @@ if HAVE_CPPUNIT
 check_PROGRAMS = \
 	LogEntryTest \
 	StringColumnFilterTest \
-	HostlistColumnFilterTest
+	HostlistColumnFilterTest \
+	NumberFormatTest
 
 TESTS = $(check_PROGRAMS)
 
@@ -20,5 +21,10 @@ HostlistColumnFilterTest_SOURCES = $(top_builddir)/src/StringColumnFilter.h $(to
 HostlistColumnFilterTest_CXXFLAGS = $(CPPUNIT_FLAGS) -I$(top_builddir) $(NAEMON_CFLAGS)
 HostlistColumnFilterTest_LDFLAGS = $(CPPUNIT_LIBS) -ldl -no-install $(NAEMON_LIBS)
 HostlistColumnFilterTest_LDADD = $(top_builddir)/src/livestatus.la
+
+NumberFormatTest_SOURCES = $(top_builddir)/src/NumberFormat.h stubs.c NumberFormatTest.h NumberFormatTest.cc
+NumberFormatTest_CXXFLAGS = $(CPPUNIT_FLAGS) -I$(top_builddir) $(NAEMON_CFLAGS)
+NumberFormatTest_LDFLAGS = $(CPPUNIT_LIBS) -ldl -no-install -lpthread $(NAEMON_LIBS)
+NumberFormatTest_LDADD = $(top_builddir)/src/livestatus.la
 
 endif
