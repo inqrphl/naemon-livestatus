@@ -1164,14 +1164,14 @@ void Query::outputFieldSeparator()
 }
 
 // The memoized "%.10e" results, one array per thread
-thread_local DoubleCacheEntry g_double_cache[DOUBLE_CACHE_SIZE];
+thread_local DoubleCacheEntry g_double_cache_dot10e[DOUBLE_CACHE_SIZE];
 
-const char *formatDoubleSlow(double value, int *len)
+const char *formatDoubleDot10eSlow(double value, int *len)
 {
     uint64_t bits;
     memcpy(&bits, &value, sizeof(bits));
     DoubleCacheEntry *e =
-        &g_double_cache[(size_t)((bits * FIBONACCI_HASHING_MULTIPLER_64_BIT)>> (64 - DOUBLE_CACHE_LOG2))];
+        &g_double_cache_dot10e[(size_t)((bits * FIBONACCI_HASHING_MULTIPLER_64_BIT)>> (64 - DOUBLE_CACHE_LOG2))];
 
     int n = snprintf(e->text, sizeof(e->text), "%.10e", value);
     if (n < 0 || (size_t)n >= sizeof(e->text)) {
@@ -1244,7 +1244,7 @@ void Query::outputCounter(counter_t value)
 void Query::outputDouble(double value)
 {
     int len;
-    const char *text = formatDouble(value, &len);
+    const char *text = formatDoubleDot10e(value, &len);
     _output->addBuffer(text, (size_t)len);
 }
 

@@ -20,7 +20,7 @@ Filter *DoubleColumn::createFilter(int operator_id, char *value)
 string DoubleColumn::valueAsString(void *data, Query *query)
 {
     int len;
-    const char *text = formatDouble(getValue(data), &len);
+    const char *text = formatDoubleDot10e(getValue(data), &len);
     return string(text, (size_t)len);
 }
 
