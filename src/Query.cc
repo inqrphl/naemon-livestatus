@@ -24,6 +24,7 @@
 #include "OringFilter.h"
 #include "NegatingFilter.h"
 #include "RowSortedSet.h"
+#include "DoubleFormat.h"
 #include "waittriggers.h"
 #include "data_encoding.h"
 #include "auth.h"
@@ -1203,11 +1204,37 @@ void Query::outputCounter(counter_t value)
     _output->addBuffer(buf, l);
 }
 
+// The memoized "%.10e" results, one array per thread
+thread_local DoubleCacheEntry g_double_cache_dot10e[DOUBLE_CACHE_SIZE];
+
+const char *formatDoubleDot10eSlow(double value, int *len)
+{
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    DoubleCacheEntry *e = &g_double_cache_dot10e[
+        (size_t)( (bits * FIBONACCI_HASHING_MULTIPLER_64_BIT) >> (64 - DOUBLE_CACHE_LOG2) )
+    ];
+
+    int n = snprintf(e->text, sizeof(e->text), "%.10e", value);
+
+    if (n < 0 || (size_t)n >= sizeof(e->text)) {
+        static thread_local char too_long[64];
+        n = snprintf(too_long, sizeof(too_long), "%.10e", value);
+        *len = n > 0 ? n : 0;
+        return too_long;
+    }
+
+    e->bits = bits;
+    e->len = (unsigned char)n;
+    *len = n;
+    return e->text;
+}
+
 void Query::outputDouble(double value)
 {
-    char buf[64];
-    int l = snprintf(buf, sizeof(buf), "%.10e", value);
-    _output->addBuffer(buf, l);
+    int len;
+    const char *text = formatDoubleDot10e(value, &len);
+    _output->addBuffer(text, (size_t)len);
 }
 
 void Query::outputNull()
