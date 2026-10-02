@@ -26,6 +26,14 @@ class Column
     string _name;
     string _description;
 public:
+    // _indirect_offset locates a pointer field inside the row object
+    // that pointer leads to the nested object whose fields this column addresses.
+    // if the Object has its fields, normal "offset" is used e.g:
+    // Object field: char* name , offset = (char *) &object.name - (char *) &object
+    // if the Object refers to another subobject, the "_indirect_offset" is used to get the nested object, the pointer is resolved, and then the offset is used, e.g:
+    // Object field: hostgroup *_hostgroup , _indirect_offset = (char *)&(ref._hostgroup) - (char *)&ref
+    // once the "_indirect_offset" is added to the base address, the pointer has to be resolved first time to get pointer to the subobject,
+    // and then a second time to get to the target field that this column addresses, to read/write to it.
     int _indirect_offset;
 
 public:

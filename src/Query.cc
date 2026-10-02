@@ -53,6 +53,10 @@ Query::Query(InputBuffer *input, OutputBuffer *output, Table *table) :
     _do_sorting(0),
     _current_line(0),
     _timezone_offset(0),
+    _output_cache_bytes(0),
+    _scratch_capture(0),
+    _capture_saved(0),
+    _capture_termination(0),
     table_tmp_storage(0)
 {
     _sorter.setQuery( this );
@@ -161,6 +165,9 @@ Query::Query(InputBuffer *input, OutputBuffer *output, Table *table) :
 
 Query::~Query()
 {
+    // delete the scratch output buffer used by the rendered-output cache
+    delete _scratch_capture;
+
     // delete dummy-columns
     for (_columns_t::iterator it = _dummy_columns.begin();
             it != _dummy_columns.end();
@@ -1117,6 +1124,55 @@ void Query::finish()
         }
         _output->addChar('\n');
     }
+}
+
+// Rendered-output cache; see Query.h and ServicelistColumn::output().
+const string *Query::cachedOutput(Column *column, void *object)
+{
+    _output_cache_t::iterator it = _output_cache.find(make_pair(column, object));
+    if (it == _output_cache.end())
+        return 0;
+    return &it->second;
+}
+
+// Bound the rendered-output cache.
+// A joined list column that is repeated for every row (host_services_with_info on the services table)
+// can otherwise cache a copy of a large part of the answer.
+static const size_t MAX_OUTPUT_CACHE_BYTES = 32 * 1024 * 1024;
+
+void Query::storeCachedOutput(Column *column, void *object, const string &bytes)
+{
+    if (_output_cache_bytes + bytes.size() > MAX_OUTPUT_CACHE_BYTES)
+        return;
+    pair<_output_cache_t::iterator, bool> result =
+        _output_cache.insert(make_pair(make_pair(column, object), bytes));
+    if (result.second)
+        _output_cache_bytes += bytes.size();
+}
+
+// Render one column's output for one row into a string instead of the client buffer.
+// ServicelistColumn uses this to fill the cache: it redirects _output to the scratch buffer, calls its own render() helper, and takes the bytes.
+void Query::beginOutputCapture()
+{
+    if (!_scratch_capture)
+        _scratch_capture = new OutputBuffer(&_capture_termination);
+    // copy assignments between OutputBuffer do not copy the buffer data. its a simple pointer copy
+    _capture_saved = _output;
+    _scratch_capture->reset();
+    _output = _scratch_capture;
+}
+
+string Query::endOutputCapture()
+{
+    string result(_scratch_capture->buffer(), _scratch_capture->size());
+    _output = _capture_saved;
+    _capture_saved = 0;
+    return result;
+}
+
+void Query::outputRaw(const char *bytes, size_t len)
+{
+    _output->addBuffer(bytes, len);
 }
 
 void *Query::findIndexFilter(const char *columnname)

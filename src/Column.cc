@@ -19,9 +19,11 @@ void *Column::shiftPointer(void *data)
         return 0;
 
     else if (_indirect_offset >= 0) {
-        // add one indirection level
-        // indirect_offset is place in structure, where
-        // pointer to real object is
+        // (char *) typecasted pointers are used when saving/applying offsets
+        // C++ does not allow pointer arithmetic on (void *)
+        // data is cast to (char *), so that bytewise offset is used when re-adding it back.
+        // The address is the address of a pointer field, so treat it as void **
+        // dereference it once to get the nested object.
         return *((void **)((char *)data + _indirect_offset));
     }
     else // no indirection

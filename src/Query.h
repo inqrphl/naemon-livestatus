@@ -79,6 +79,18 @@ class Query
     typedef map<_stats_group_spec_t, Aggregator **> _stats_groups_t;
     _stats_groups_t _stats_groups;
 
+    // Rendered output of columns whose output repeats across rows
+    // Keyed by a (column, object) pair for uniqueness.
+    typedef map<pair<Column *, void *>, string> _output_cache_t;
+    _output_cache_t _output_cache;
+    size_t _output_cache_bytes;
+
+    // Scratch OutputBuffer used to render one column into a string before caching it.
+    // Lazily allocated, reused across captures, never flushed.
+    OutputBuffer *_scratch_capture;
+    OutputBuffer *_capture_saved;
+    int _capture_termination;
+
 public:
     void *table_tmp_storage; // Used for tables to store per query temporary data
 
@@ -127,6 +139,13 @@ public:
     int timezoneOffset() { return _timezone_offset; }
     AndingFilter *filter() { return &_filter; }
     bool isSorting() { return _do_sorting; }
+
+    /* Rendered-output cache used by ServicelistColumn (see there). */
+    const string *cachedOutput(Column *column, void *object);
+    void storeCachedOutput(Column *column, void *object, const string &bytes);
+    void beginOutputCapture();
+    string endOutputCapture();
+    void outputRaw(const char *bytes, size_t len);
 
 private:
     bool doStats();
